@@ -67,7 +67,7 @@ function updateMessagewithSuccess(bot, msg, chat) {
   const strings = require('./strings')()
 
   bot.editMessageText(
-    strings.translate('languageSelectedBanofbot', chat.language),
+    strings.translate('languageSelectedmutevotebot', chat.language),
     {
       chat_id: msg.chat.id,
       message_id: msg.message_id,

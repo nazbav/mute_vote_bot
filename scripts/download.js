@@ -9,7 +9,7 @@ const fs = require('fs')
   const translations = (
     await axios.get('https://localizer.borodutch.com/localizations')
   ).data.filter((l) => {
-    return l.tags.indexOf('banofbot') > -1
+    return l.tags.indexOf('mutevotebot') > -1
   })
   console.log('==== Got localizations:')
   console.log(JSON.stringify(translations, undefined, 2))

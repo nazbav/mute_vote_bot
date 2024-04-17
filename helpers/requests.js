@@ -6,21 +6,20 @@
  */
 
 /** Dependencies */
-const db = require('./db')
-const _ = require('lodash')
-const admins = require('./admins')
-const { Lock } = require('semaphore-async-await')
-const { isRuChat } = require('./isRuChat')
-const { isOver10000 } = require('./goldenBorodutchSubCount')
+const _ = require('lodash');
+const { Lock } = require('semaphore-async-await');
+const db = require('./db');
+const admins = require('./admins');
+const { isRuChat } = require('./isRuChat');
+const { isOver10000 } = require('./goldenBorodutchSubCount');
+const bot = require('./bot');
 
 const promoAdditions = {
-  ru: () =>
-    isOver10000()
-      ? '<a href="https://www.ua2canada.info">Информация по переезду из 🇺🇦 в 🇨🇦</a>'
-      : '<a href="https://www.ua2canada.info">Информация по переезду из 🇺🇦 в 🇨🇦</a>',
-  en: () =>
-    '<a href="https://www.ua2canada.info/">Info on moving from 🇺🇦 to 🇨🇦</a>',
-}
+  ru: () => (isOver10000()
+    ? '<a href="https://www.ua2canada.info">Информация по переезду из 🇺🇦 в 🇨🇦</a>'
+    : '<a href="https://www.ua2canada.info">Информация по переезду из 🇺🇦 в 🇨🇦</a>'),
+  en: () => '<a href="https://www.ua2canada.info/">Info on moving from 🇺🇦 to 🇨🇦</a>',
+};
 
 /**
  * Starts ban request
@@ -28,31 +27,31 @@ const promoAdditions = {
  * @param {Telegram:Message} msg Message to start ban request
  */
 async function startRequest(bot, msg) {
-  const chat = await db.findChat(msg.chat)
-  const starter = await db.findUser(msg.from)
-  const candidate = await db.findUser(msg.reply_to_message.from)
+  const chat = await db.findChat(msg.chat);
+  const starter = await db.findUser(msg.from);
+  const candidate = await db.findUser(msg.reply_to_message.from);
 
   // Check if it can create new ban request
-  const now = new Date().getTime()
-  const lastBan = chat.last_ban.getTime()
-  const requiredMilliseconds = chat.seconds_between_bans * 1000
+  const now = new Date().getTime();
+  const lastBan = chat.last_ban.getTime();
+  const requiredMilliseconds = chat.seconds_between_bans * 1000;
   if (now - lastBan < requiredMilliseconds) {
-    return sendBanLimitError(bot, chat)
+    return sendBanLimitError(bot, chat);
   }
 
-  const isBotAdmin = await admins.isBotAdmin(bot, chat.id)
+  const isBotAdmin = await admins.isBotAdmin(bot, chat.id);
   if (!isBotAdmin) {
-    sendAdminError(bot, chat)
-    return
+    sendAdminError(bot, chat);
+    return;
   }
 
-  const isCandidateAdmin = await admins.isAdmin(bot, chat.id, candidate.id)
+  const isCandidateAdmin = await admins.isAdmin(bot, chat.id, candidate.id);
   if (isCandidateAdmin) {
-    return
+    return;
   }
 
-  if (candidate.username === 'banofbot') {
-    return
+  if (candidate.username === 'mutevotebot') {
+    return;
   }
 
   const mockRequest = {
@@ -62,22 +61,22 @@ async function startRequest(bot, msg) {
     candidate,
     starter,
     voters_ban: [starter],
-  }
-  const request = await db.createRequest(mockRequest)
+  };
+  const request = await db.createRequest(mockRequest);
 
-  const strings = require('./strings')()
+  const strings = require('./strings')();
 
-  const starterName = await request.starter.realNameWithHTML(bot, chat.id)
-  const candidateName = await request.candidate.realNameWithHTML(bot, chat.id)
+  const starterName = await request.starter.realNameWithHTML(bot, chat.id);
+  const candidateName = await request.candidate.realNameWithHTML(bot, chat.id);
 
-  const promoAddition = promoAdditions[isRuChat(chat) ? 'ru' : 'en']()
+  const promoAddition = promoAdditions[isRuChat(chat) ? 'ru' : 'en']();
 
   const text = `${strings.translate(
     'kickRequest',
     request.chat.language,
     starterName,
-    candidateName
-  )}\n${promoAddition}`
+    candidateName,
+  )}\n${promoAddition}`;
   const options = {
     parse_mode: 'HTML',
     disable_web_page_preview: true,
@@ -88,16 +87,16 @@ async function startRequest(bot, msg) {
         request._id,
         strings,
         request.chat.required_voters_count,
-        request.chat.language
+        request.chat.language,
       ),
     },
-  }
-  options.reply_markup = JSON.stringify(options.reply_markup)
-  const data = await bot.sendMessage(request.chat.id, text, options)
+  };
+  options.reply_markup = JSON.stringify(options.reply_markup);
+  const data = await bot.sendMessage(request.chat.id, text, options);
 
-  request.inline_chat_id = data.chat.id
-  request.inline_message_id = data.message_id
-  await request.save()
+  request.inline_chat_id = data.chat.id;
+  request.inline_message_id = data.message_id;
+  await request.save();
 }
 
 /**
@@ -106,68 +105,64 @@ async function startRequest(bot, msg) {
  * @param {Teleram:Message} msg Message that triggered inline
  */
 async function voteQuery(bot, msg) {
-  const lock = new Lock(1)
-  await lock.acquire()
+  const lock = new Lock(1);
+  await lock.acquire();
   try {
-    const options = msg.data.split('~')
-    const requestId = options[1]
-    const against = parseInt(options[2], 10) === 1
+    const options = msg.data.split('~');
+    const requestId = options[1];
+    const against = parseInt(options[2], 10) === 1;
 
-    const member = await bot.getChatMember(msg.message.chat.id, msg.from.id)
+    const member = await bot.getChatMember(msg.message.chat.id, msg.from.id);
 
     if (!['creator', 'administrator', 'member'].includes(member.status)) {
-      return bot.answerCallbackQuery(msg.id)
+      return bot.answerCallbackQuery(msg.id);
     }
 
     let request = await db
       .findRequest(requestId)
-      .populate('chat candidate starter voters_ban voters_noban')
-    const voter = await db.findUser(msg.from)
+      .populate('chat candidate starter voters_ban voters_noban');
+    const voter = await db.findUser(msg.from);
 
-    const strings = require('./strings')()
+    const strings = require('./strings')();
 
     if (against) {
-      const alreadyThere = _.find(request.voters_noban, (arrayVoter) =>
-        arrayVoter._id.equals(voter._id)
-      )
+      const alreadyThere = _.find(request.voters_noban, (arrayVoter) => arrayVoter._id.equals(voter._id));
       if (alreadyThere) {
         await bot.answerCallbackQuery(msg.id, {
           text: strings.translate('voteSave', request.chat.language),
           show_alert: true,
-        })
-        return
-      } else {
-        await bot.answerCallbackQuery(msg.id)
+        });
+        return;
       }
+      await bot.answerCallbackQuery(msg.id);
+
       request.voters_ban = request.voters_ban.filter(
-        (arrayVoter) => !arrayVoter._id.equals(voter._id)
-      )
-      request.voters_noban.push(voter)
+        (arrayVoter) => !arrayVoter._id.equals(voter._id),
+      );
+      request.voters_noban.push(voter);
     } else {
-      const alreadyThere = _.find(request.voters_ban, (arrayVoter) =>
-        arrayVoter._id.equals(voter._id)
-      )
+      const alreadyThere = _.find(request.voters_ban, (arrayVoter) => arrayVoter._id.equals(voter._id));
       if (alreadyThere) {
         await bot.answerCallbackQuery(msg.id, {
           text: strings.translate('voteKick', request.chat.language),
           show_alert: true,
-        })
-        return
-      } else {
-        await bot.answerCallbackQuery(msg.id)
+        });
+        return;
       }
+      await bot.answerCallbackQuery(msg.id);
+
       request.voters_noban = request.voters_noban.filter(
-        (arrayVoter) => !arrayVoter._id.equals(voter._id)
-      )
-      request.voters_ban.push(voter)
+        (arrayVoter) => !arrayVoter._id.equals(voter._id),
+      );
+      request.voters_ban.push(voter);
     }
-    request = await request.save()
-    await updateMessage(bot, request)
+    request = await request.save();
+    await updateMessage(bot, request);
   } catch (err) {
-    console.error(err)
+    console.error(err);
     // Do nothing
   } finally {
-    lock.release()
+    lock.release();
   }
 }
 
@@ -177,31 +172,30 @@ async function voteQuery(bot, msg) {
  * @param {Mongoose:Request} request Request whos message to be updated
  */
 async function updateMessage(bot, request) {
-  const finished =
-    request.voters_noban.length >= request.chat.required_voters_count ||
-    request.voters_ban.length >= request.chat.required_voters_count
+  const finished = request.voters_noban.length >= request.chat.required_voters_count
+    || request.voters_ban.length >= request.chat.required_voters_count;
   if (finished) {
-    return await finishRequest(bot, request)
+    return await finishRequest(bot, request);
   }
-  const strings = require('./strings')()
+  const strings = require('./strings')();
 
   const starterName = await request.starter.realNameWithHTML(
     bot,
-    request.chat.id
-  )
+    request.chat.id,
+  );
   const candidateName = await request.candidate.realNameWithHTML(
     bot,
-    request.chat.id
-  )
+    request.chat.id,
+  );
 
-  const promoAddition = promoAdditions[isRuChat(request.chat) ? 'ru' : 'en']()
+  const promoAddition = promoAdditions[isRuChat(request.chat) ? 'ru' : 'en']();
 
   const text = `${strings.translate(
     'kickRequest',
     request.chat.language,
     starterName,
-    candidateName
-  )}\n${promoAddition}`
+    candidateName,
+  )}\n${promoAddition}`;
   const options = {
     parse_mode: 'HTML',
     chat_id: request.inline_chat_id,
@@ -214,13 +208,13 @@ async function updateMessage(bot, request) {
         request._id,
         strings,
         request.chat.required_voters_count,
-        request.chat.language
+        request.chat.language,
       ),
     },
-  }
-  options.reply_markup = JSON.stringify(options.reply_markup)
+  };
+  options.reply_markup = JSON.stringify(options.reply_markup);
 
-  return await bot.editMessageText(text, options)
+  return await bot.editMessageText(text, options);
 }
 
 /**
@@ -229,58 +223,63 @@ async function updateMessage(bot, request) {
  * @param {Mongoose:Request} request Request to be finalized
  */
 async function finishRequest(bot, request) {
-  const strings = require('./strings')()
+  const strings = require('./strings')();
 
-  const saved =
-    request.voters_noban.length >= request.chat.required_voters_count
-  let voters
+  const saved = request.voters_noban.length >= request.chat.required_voters_count;
+  let voters;
   if (saved) {
-    const votersArray = []
+    const votersArray = [];
     for (const voter of request.voters_noban) {
-      const realName = await voter.realNameWithHTML(bot, request.chat.id)
-      votersArray.push(realName)
+      const realName = await voter.realNameWithHTML(bot, request.chat.id);
+      votersArray.push(realName);
     }
-    voters = votersArray.join(', ')
+    voters = votersArray.join(', ');
   } else {
-    const votersArray = []
+    const votersArray = [];
     for (const voter of request.voters_ban) {
-      const realName = await voter.realNameWithHTML(bot, request.chat.id)
-      votersArray.push(realName)
+      const realName = await voter.realNameWithHTML(bot, request.chat.id);
+      votersArray.push(realName);
     }
-    voters = votersArray.join(', ')
+    voters = votersArray.join(', ');
   }
 
   const candidateName = await request.candidate.realNameWithHTML(
     bot,
-    request.chat.id
-  )
+    request.chat.id,
+  );
 
-  const promoAddition = promoAdditions[isRuChat(request.chat) ? 'ru' : 'en']()
+  const promoAddition = promoAdditions[isRuChat(request.chat) ? 'ru' : 'en']();
 
   const text = `${
     saved
       ? strings.translate(
-          'resultSave',
-          request.chat.language,
-          candidateName,
-          voters
-        )
+        'resultSave',
+        request.chat.language,
+        candidateName,
+        voters,
+      )
       : strings.translate(
-          'resultKick',
-          request.chat.language,
-          candidateName,
-          voters
-        )
-  }\n${promoAddition}`
+        'resultKick',
+        request.chat.language,
+        candidateName,
+        voters,
+      )
+  }\n${promoAddition}`;
 
   if (!saved) {
-    bot.kickChatMember(request.chat.id, request.candidate.id)
+    //    bot.kickChatMember(request.chat.id, request.candidate.id);
+
+    bot.restrictChatMember(request.chat.id, request.candidate.id, {
+      until_date: Math.floor(Date.now() / 1000) + 86400, // 24 hours in seconds
+      can_send_messages: false,
+    });
+
     if (request.reply_chat_id && request.reply_message_id) {
-      bot.deleteMessage(request.reply_chat_id, request.reply_message_id)
+      bot.deleteMessage(request.reply_chat_id, request.reply_message_id);
     }
     try {
-      request.chat.last_ban = new Date()
-      await request.chat.save()
+      request.chat.last_ban = new Date();
+      await request.chat.save();
     } catch (err) {
       // Do nothing
     }
@@ -291,8 +290,8 @@ async function finishRequest(bot, request) {
     chat_id: request.inline_chat_id,
     message_id: request.inline_message_id,
     disable_web_page_preview: true,
-  }
-  return bot.editMessageText(text, options)
+  };
+  return bot.editMessageText(text, options);
 }
 
 /**
@@ -310,7 +309,7 @@ function kickKeyboard(
   requestId,
   strings,
   voteCount,
-  language
+  language,
 ) {
   return [
     [
@@ -325,7 +324,7 @@ function kickKeyboard(
         callback_data: `vi~${String(requestId)}~1`,
       },
     ],
-  ]
+  ];
 }
 
 /**
@@ -334,13 +333,13 @@ function kickKeyboard(
  * @param {Mongoose:Chat} chat Chat that should receive the message
  */
 function sendAdminError(bot, chat) {
-  const strings = require('./strings')()
+  const strings = require('./strings')();
 
   return bot.sendMessage(
     chat.id,
     chat.language,
-    strings.translate('adminError')
-  )
+    strings.translate('adminError'),
+  );
 }
 
 /**
@@ -349,16 +348,16 @@ function sendAdminError(bot, chat) {
  * @param {Mongoose:Chat} chat Chat that should receive the message
  */
 function sendBanLimitError(bot, chat) {
-  const strings = require('./strings')()
+  const strings = require('./strings')();
 
   return bot.sendMessage(
     chat.id,
-    strings.translate('tooSoonError', chat.language)
-  )
+    strings.translate('tooSoonError', chat.language),
+  );
 }
 
 /** Exports */
 module.exports = {
   startRequest,
   voteQuery,
-}
+};

@@ -17,7 +17,7 @@ function toggle(bot, chat) {
   chat
     .save()
     .then((newChat) => {
-      const text = newChat.admin_locked ? 'lockOnBanofbot' : 'lockOffBanofbot'
+      const text = newChat.admin_locked ? 'lockOnmutevotebot' : 'lockOffmutevotebot'
       bot.sendMessage(newChat.id, strings.translate(text, chat.language), {
         parse_mode: 'Markdown',
       })
